@@ -162,6 +162,16 @@ def extract(path):
     put('vat_in_op', T, r'^4\.09 \| Input VAT — operating')
     put('vat_in_capex', T, r'^4\.10 \| Input VAT — capex')
     put('vat_net', T, r'^4\.12 \| NET VAT')
+    put('deemed', T, r'^6\.13 \| Total deemed income', required=False)
+    put('rent_obj', T, r'^6\.18 \| Object of rent tax', required=False)
+    put('rent_loss_close', T, r'^6\.22 \| Losses carried forward', required=False)
+    idx = 0.0
+    for code in ('6.05', '6.06'):
+        ri = S[T].find(r'^' + re.escape(code) + r' \|')
+        if ri is not None:
+            vals = [num(x) for x in S[T].rows[ri] if num(x) is not None]
+            idx += vals[-1] if vals else 0.0
+    D['meta']['rent_index'] = idx
     ri = S[T].find(r'^6\.02 \| Special rent tax rate')
     D['meta']['rent_rate'] = [num(x) for x in S[T].rows[ri] if num(x) is not None][-1] if ri is not None else 0
     ri = S[T].find(r'^2\.02 \| Property tax rate')

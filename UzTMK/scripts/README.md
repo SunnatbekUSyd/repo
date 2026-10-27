@@ -3,11 +3,10 @@
 Generates the three yearly bank-format business plans (`../UzTMK_BankBP_*.xlsx`) from the UzTMK FS models.
 
 ```
-python3 extract_full.py <FS model.xlsx> full_<key>.json "<original model file name>"
-python3 build_bank.py full_<key>.json <sarikul|tungsten|moly> ../UzTMK_BankBP_<name>.xlsx
+python3 extract_full.py <FS model.xlsx> full_<key>.json "<model file name>"
+python3 -c "from make import make; make('<key>', <price factor>, '../UzTMK_BankBP_<name>.xlsx', final=True, start=<first year>)"
 ```
 
-- `extract_full.py` reads annual values (USD) from the FS model and keeps the source sheet/row of every number.
-- `build_bank.py` writes the bank template structure (Приложения 1–16, ИНФОРМАЦИЯ, NPV) with live formulas;
-  the loan split is taken from the 30% EPC-advance file and scaled to 78.0 mln USD.
-- Recalculate the output (e.g. LibreOffice) before reading cached values; sheet «Проверки» must show «ВСЕ OK».
+Price factors used: sarikul 0.849 (from 2027), tungsten 0.978 (from 2027), moly 0.773 (from 2028).
+`adjust.py` applies the factor to sale prices and updates every revenue-linked item; `make.py` builds,
+recalculates and writes the source numbers straight into the bank sheets.

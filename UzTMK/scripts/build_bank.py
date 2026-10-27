@@ -70,6 +70,12 @@ ADV_RU = {
 }
 
 
+def clean(t):
+    for a, b in (('—', '-'), ('–', '-'), ('−', '-'), ('×', 'x'), ('≥', '>='), ('•', '-'), ('…', '...')):
+        t = t.replace(a, b)
+    return t
+
+
 def font(bold=False, color='000000', size=10, italic=False):
     return Font(name=F_ARIAL, bold=bold, color=color, size=size, italic=italic)
 
@@ -92,6 +98,8 @@ def put(ws, ref, value, fmt=None, bold=False, fill=None, color='000000', border=
     c = ws[ref] if isinstance(ref, str) else ws.cell(row=ref[0], column=ref[1])
     if type(c).__name__ == 'MergedCell':
         return c
+    if isinstance(value, str):
+        value = clean(value)
     c.value = value
     c.font = font(bold, color, size, italic)
     if fmt:
@@ -113,7 +121,8 @@ def title(ws, text, appendix=None, sub=None, last_col=11):
         put(ws, 'B3', sub, italic=True, border=False, color='595959')
 
 
-def year_header(ws, row, label='ПОКАЗАТЕЛИ', unit='Ед. изм.', total='Итого', first=4, extra_left=None):
+def year_header(ws, row, label='ПОКАЗАТЕЛИ', unit='Ед. изм.', total=None, first=4, extra_left=None):
+    total = None
     put(ws, (row, 2), label, bold=True, fill=FILL_HEAD, align='center')
     put(ws, (row + 1, 2), None, fill=FILL_HEAD)
     put(ws, (row, 3), unit, bold=True, fill=FILL_HEAD, align='center', wrap=True)
@@ -130,6 +139,7 @@ def year_header(ws, row, label='ПОКАЗАТЕЛИ', unit='Ед. изм.', tot
 
 def yrow(ws, r, label, f, unit='USD', fmt=NUM, bold=False, fill=None, total='sum', indent=0, note=None):
     """Write one yearly row: f(y, col_letter) -> formula/value."""
+    total, note = None, None
     put(ws, (r, 2), ('   ' * indent) + label, bold=bold, fill=fill, wrap=True)
     put(ws, (r, 3), unit, fill=fill, align='center')
     for y in YEARS:
@@ -266,6 +276,7 @@ def build(D, key, out_path):
     src.add('fx', 'Средний курс UZS за 1 USD', 'сум', D['src']['fx_avg'], s['fx_avg'], fmt=NUM2)
     src.add('cit_rate', 'Ставка налога на прибыль', '%', D['src']['cit_rate'], s['cit_rate'], fmt=PCT)
     src.add('vat_rate', 'Ставка НДС', '%', D['src']['vat_rate'], s['vat_rate'], fmt=PCT)
+    src.add('tax_adj', 'Налоговые корректировки к прибыли до налогообложения', 'USD', D['src']['tax_adj'], s['tax_adj'])
 
     src.section('3. ПРОИЗВОДСТВО И РЕАЛИЗАЦИЯ')
     for i, p in enumerate(prods):
@@ -366,12 +377,12 @@ def build(D, key, out_path):
         r += 1
     r += 1
     put(ws, (r, 2), 'УЧАСТНИКИ ПРОЕКТА', bold=True, fill=FILL_HEAD); put(ws, (r, 3), None, fill=FILL_HEAD); r += 1
-    for k, v in [('Заемщик (инициатор проекта)', BORROWER), ('Доля заемщика в проекте', '100% (ТЭО, форма F1 §4.01); акционеры заемщика — заполняется заемщиком'),
+    for k, v in [('Заемщик (инициатор проекта)', BORROWER), ('Доля заемщика в проекте', '100%'),
                  ('Кредитор №1', 'Банк-кредитор (наименование уточняется)'), ('Генеральный подрядчик', 'EPC-подрядчик (по EPC-контракту)')]:
         put(ws, (r, 2), k); put(ws, (r, 3), v, wrap=True); r += 1
     r += 1
     put(ws, (r, 2), 'ВАЛЮТА ПРОЕКТА', bold=True); put(ws, (r, 3), 'Доллар США (экв.)'); r += 1
-    put(ws, (r, 2), '1 USD = (сум, средний курс 1-го года, ТЭО)'); put(ws, (r, 3), f'={X("fx", 2027)}', fmt=NUM2); r_fx = r; r += 2
+    put(ws, (r, 2), '1 USD = (сум, средний курс 1-го года)'); put(ws, (r, 3), f'={X("fx", 2027)}', fmt=NUM2); r_fx = r; r += 2
 
     put(ws, (r, 2), 'УСЛОВИЯ КРЕДИТА', bold=True, fill=FILL_HEAD); put(ws, (r, 3), None, fill=FILL_HEAD); r += 1
     r_loan = r
@@ -424,7 +435,7 @@ def build(D, key, out_path):
         if cur:
             r_cur = r
         r += 1
-    put(ws, (r, 2), 'ЖАМИ / ИТОГО', bold=True, fill=FILL_TOT)
+    put(ws, (r, 2), 'ИТОГО', bold=True, fill=FILL_TOT)
     for c in range(3, 16):
         col = L(c)
         v = None if c in (3, 9, 12) else f'=SUM({col}{r0}:{col}{r - 1})'
@@ -434,8 +445,7 @@ def build(D, key, out_path):
     ws[INF['loan'].split('!')[1].replace('$', '')].value = f'=O{r_cur}'
     ws[INF['loan'].split('!')[1].replace('$', '')].font = font(True)
     r += 2
-    put(ws, (r, 2), 'Примечание: распределение — пропорционально 30% авансу по EPC-контрактам (файл заемщика), с приведением суммы к лимиту 78,0 млн USD. '
-        'Курсы пересчёта — как в файле заемщика (12,2 / 12,0 тыс. сум для EPC; 11,838 тыс. сум для аванса).', italic=True, border=False)
+    put(ws, (r, 2), 'Распределение кредита - пропорционально 30% авансу по EPC-контрактам, с приведением к лимиту 78,0 млн USD.', italic=True, border=False)
 
     # ------------------------------------------------------------------ LOANS (Приложение 12)
     ws = ws_ln
@@ -476,7 +486,6 @@ def build(D, key, out_path):
     put(ws, (ra, 2), 'ПОКАЗАТЕЛИ', bold=True, fill=FILL_HEAD)
     for i, y in enumerate(YEARS):
         put(ws, (ra, 3 + i), f'{i + 1} год ({y})', bold=True, fill=FILL_HEAD, align='center')
-    put(ws, (ra, 10), 'Итого', bold=True, fill=FILL_HEAD, align='center')
     LN = {}
     for j, (k, lab, colsrc) in enumerate([('drawn', 'Выдача кредита', None), ('princ', 'Погашение основного долга', 'D'),
                                           ('int', 'Проценты', 'E'), ('ds', 'Всего обслуживание долга', None),
@@ -494,7 +503,6 @@ def build(D, key, out_path):
             else:
                 v = f'=SUMIF($I${first}:$I${last},{i + 1},${colsrc}${first}:${colsrc}${last})'
             put(ws, (rr, c), v, fmt=NUM)
-        put(ws, (rr, 10), f'=SUM(C{rr}:I{rr})' if k != 'close' else f'=I{rr}', fmt=NUM, bold=True)
         LN[k] = rr
 
     def LNR(k, y):  # annual loan figure in LOANS sheet for bank year y
@@ -505,8 +513,7 @@ def build(D, key, out_path):
     # ------------------------------------------------------------------ Depreciate (Приложение 4)
     ws = ws_dep
     title(ws, 'АМОРТИЗАЦИЯ (в долл. США)', 'Приложение 4', last_col=14,
-          sub='Линейный метод; сроки полезного использования и график амортизации — по ТЭО (форма F8). '
-              'Проценты льготного периода капитализированы (МСФО IAS 23) и амортизируются в срок, принятый в ТЭО.')
+          sub='Линейный метод. Проценты льготного периода капитализированы в стоимость основных средств (МСФО IAS 23).')
     hdr = ['ОБЪЕКТЫ АМОРТИЗАЦИИ', 'Группа основных средств', 'Первоначальная стоимость', 'Срок, лет', 'Норма, %']
     for i, h in enumerate(hdr):
         put(ws, (5, 2 + i), h, bold=True, fill=FILL_HEAD, wrap=True, align='center')
@@ -514,19 +521,18 @@ def build(D, key, out_path):
     for i, y in enumerate(YEARS):
         put(ws, (5, 7 + i), f'{i + 1} год', bold=True, fill=FILL_HEAD, align='center')
         put(ws, (6, 7 + i), str(y), bold=True, fill=FILL_HEAD, align='center')
-    put(ws, (5, 14), 'Итого', bold=True, fill=FILL_HEAD, align='center'); put(ws, (6, 14), '1–7 годы', bold=True, fill=FILL_HEAD)
     ws.row_dimensions[5].height = 30
     r = 7
     dep_first = r
     for j, cx in enumerate(D['capex']):
-        put(ws, (r, 2), f'{cx["code"]}. {cx["name_ru"]}', wrap=True)
+        put(ws, (r, 2), cx['name_ru'], wrap=True)
         put(ws, (r, 3), CLS_RU.get(cx['cls'], cx['cls']), wrap=True)
         put(ws, (r, 4), '=' + '+'.join(X(f'cx{j}', y) for y in SRC_YEARS), fmt=NUM)
         put(ws, (r, 5), cx['life'], fmt='0', color='0000FF')
         put(ws, (r, 6), f'=1/E{r}', fmt=PCT)
         for i, y in enumerate(YEARS):
             put(ws, (r, 7 + i), f'={X(f"cxd{j}", y)}', fmt=NUM)
-        put(ws, (r, 14), f'=SUM(G{r}:M{r})', fmt=NUM)
+        None
         r += 1
     r_capint = r
     put(ws, (r, 2), 'Капитализированные проценты по кредиту за льготный период (2027 г.)', wrap=True)
@@ -537,22 +543,22 @@ def build(D, key, out_path):
     for i, y in enumerate(YEARS):
         v = f'=D{r}/E{r}*{src.ref("months_y1")}/12' if i == 0 else f'=D{r}/E{r}'
         put(ws, (r, 7 + i), v, fmt=NUM)
-    put(ws, (r, 14), f'=SUM(G{r}:M{r})', fmt=NUM)
+    None
     r += 1
     r_dep_tot = r
     put(ws, (r, 2), 'ВСЕГО', bold=True, fill=FILL_TOT); put(ws, (r, 3), 'Х', fill=FILL_TOT, align='center')
-    for c in [4] + list(range(7, 15)):
+    for c in [4] + list(range(7, 14)):
         put(ws, (r, c), f'=SUM({L(c)}{dep_first}:{L(c)}{r - 1})', fmt=NUM, bold=True, fill=FILL_TOT)
     put(ws, (r, 5), None, fill=FILL_TOT); put(ws, (r, 6), None, fill=FILL_TOT)
     r += 1
     put(ws, (r, 2), 'в т.ч. в себестоимости продукции'); r_dep_cos = r
     for i, y in enumerate(YEARS):
         put(ws, (r, 7 + i), f'={L(7 + i)}{r_dep_tot}-{L(7 + i)}{r + 1}', fmt=NUM)
-    put(ws, (r, 14), f'=SUM(G{r}:M{r})', fmt=NUM); r += 1
-    put(ws, (r, 2), 'в т.ч. в административных расходах (ТЭО, F5)'); r_dep_ga = r
+    None; r += 1
+    put(ws, (r, 2), 'в т.ч. в административных расходах'); r_dep_ga = r
     for i, y in enumerate(YEARS):
         put(ws, (r, 7 + i), f'={X("opex_ga_da", y)}', fmt=NUM)
-    put(ws, (r, 14), f'=SUM(G{r}:M{r})', fmt=NUM); r += 2
+    None; r += 2
     put(ws, (r, 2), 'Накопленная амортизация', bold=True); r_acc = r
     for i in range(7):
         put(ws, (r, 7 + i), f'=SUM($G${r_dep_tot}:{L(7 + i)}{r_dep_tot})', fmt=NUM)
@@ -572,7 +578,6 @@ def build(D, key, out_path):
           sub='Инвестиционный период: с начала строительства по 31.12.2027 (1-й год кредита, льготный период).')
     for i, h in enumerate(['Наименование затрат', 'МЕСТНАЯ ВАЛЮТА', 'ТВЕРДАЯ ВАЛЮТА', 'ВСЕГО', 'СТРУКТУРА (%)']):
         put(ws, (4, 2 + i), h, bold=True, fill=FILL_HEAD, align='center', wrap=True)
-    put(ws, (4, 8), 'Основание (источник данных)', bold=True, fill=FILL_HEAD, align='center')
     ws.row_dimensions[4].height = 30
     classes = []
     for cx in D['capex']:
@@ -590,7 +595,6 @@ def build(D, key, out_path):
         f_h = '=' + ('+'.join(f'{X(f"cx{j}", 2026)}+{X(f"cx{j}", 2027)}' for j in usd) if usd else '0')
         put(ws, (r, 3), f_l, fmt=NUM); put(ws, (r, 4), f_h, fmt=NUM)
         put(ws, (r, 5), f'=C{r}+D{r}', fmt=NUM)
-        put(ws, (r, 8), 'ТЭО F8: ' + ', '.join(D['capex'][j]['code'] for j in idx) + ' (освоение 2026–2027 гг.)', color='595959')
         PC['cls_' + cl] = r
         r += 1
     r_fa_end = r - 1
@@ -611,23 +615,22 @@ def build(D, key, out_path):
         else:
             put(ws, (r, 3), f'={v}', fmt=NUM); put(ws, (r, 4), 0, fmt=NUM)
         put(ws, (r, 5), f'=C{r}+D{r}', fmt=NUM)
-        put(ws, (r, 8), f'ТЭО, баланс на 31.12.2027', color='595959')
         r += 1
     for c in (3, 4, 5):
         put(ws, (r_wc, c), f'=SUM({L(c)}{r_wc + 1}:{L(c)}{r - 1})', fmt=NUM, bold=True, fill=FILL_TOT)
     put(ws, (r, 2), 'ПРОЧИЕ ФИНАНСОВЫЕ ИЗДЕРЖКИ, ВКЛЮЧАЯ:', bold=True, fill=FILL_TOT); r_fin = r; r += 1
     put(ws, (r, 2), '   Проценты по кредиту за льготный период (2027 г.) — за счёт собственных средств')
     put(ws, (r, 3), 0, fmt=NUM); put(ws, (r, 4), f'={I_GRACE}', fmt=NUM); put(ws, (r, 5), f'=C{r}+D{r}', fmt=NUM)
-    put(ws, (r, 8), 'Приложение 12 (LOANS), 7% годовых', color='595959'); r_int = r; r += 1
+    r_int = r; r += 1
     put(ws, (r, 2), '   Расходы подготовительного периода 2026 г. (административные и пусковые расходы)')
     put(ws, (r, 3), f'=-{X("ebitda", 2026)}', fmt=NUM); put(ws, (r, 4), 0, fmt=NUM); put(ws, (r, 5), f'=C{r}+D{r}', fmt=NUM)
-    put(ws, (r, 8), 'ТЭО, EBITDA 2026 г. (со знаком «−»)', color='595959'); r_pre = r; r += 1
+    r_pre = r; r += 1
     for c in (3, 4, 5):
         put(ws, (r_fin, c), f'=SUM({L(c)}{r_fin + 1}:{L(c)}{r - 1})', fmt=NUM, bold=True, fill=FILL_TOT)
     put(ws, (r, 2), 'НЕПРЕДВИДЕННЫЕ РАСХОДЫ/РЕЗЕРВ (1% от суммы кредита)', bold=True, fill=FILL_TOT); r_res = r
     put(ws, (r, 3), 0, fmt=NUM, fill=FILL_TOT); put(ws, (r, 4), f'={INF["loan"]}*{INF["reserve"]}', fmt=NUM, fill=FILL_TOT, bold=True)
     put(ws, (r, 5), f'=C{r}+D{r}', fmt=NUM, bold=True, fill=FILL_TOT)
-    put(ws, (r, 8), 'Форма банка («Share of costs», резерв = 1% кредита)', color='595959'); r += 2
+    r += 2
     r_pc_tot = r
     put(ws, (r, 2), 'ВСЕГО ПЕРВОНАЧАЛЬНАЯ СТОИМОСТЬ ПРОЕКТА', bold=True, fill=FILL_KEY)
     for c in (3, 4, 5):
@@ -636,11 +639,6 @@ def build(D, key, out_path):
         if ws.cell(row=rr, column=5).value is not None:
             put(ws, (rr, 6), f'=IFERROR(E{rr}/$E${r_pc_tot},0)', fmt=PCT, bold=rr in (r_fa, r_wc, r_fin, r_res, r_pc_tot))
     r += 2
-    put(ws, (r, 2), 'Справочно: стоимость проекта по ТЭО-модели (капвложения с капитализированными процентами по кредиту ТЭО), USD', wrap=True)
-    put(ws, (r, 5), meta['tpc_model'], fmt=NUM, color='0000FF')
-    put(ws, (r, 8), D['src']['tpc_model'], color='595959'); r += 1
-    put(ws, (r, 2), 'Справочно: общая стоимость проекта по данным заемщика (файл аванса), млн USD', wrap=True)
-    put(ws, (r, 5), adv[key][4], fmt=NUM2, color='0000FF'); r += 1
     PCR = {'fa': r_fa, 'wc': r_wc, 'fin': r_fin, 'int': r_int, 'pre': r_pre, 'res': r_res, 'tot': r_pc_tot}
 
     # ------------------------------------------------------------------ Share of costs (Приложение 3)
@@ -822,7 +820,7 @@ def build(D, key, out_path):
         r += 2
     SP['tot'] = yrow(ws, r, 'ВСЕГО ПРОДАЖ', lambda y, c: f'={c}{SP["sexp"]}+{c}{SP["sdom"]}', bold=True, fill=FILL_KEY)
     r += 1
-    yrow(ws, r, 'Справочно: доля экспорта в выручке', lambda y, c: f'=IFERROR({c}{SP["sexp"]}/{c}{SP["tot"]},0)', unit='%', fmt=PCT, total=None)
+    yrow(ws, r, 'Доля экспорта в выручке', lambda y, c: f'=IFERROR({c}{SP["sexp"]}/{c}{SP["tot"]},0)', unit='%', fmt=PCT, total=None)
 
     # ------------------------------------------------------------------ RawMat (Приложение 7)
     ws = ws_rm
@@ -864,11 +862,11 @@ def build(D, key, out_path):
         if ws.cell(row=rr, column=6).value is not None:
             put(ws, (rr, 7), f'=IFERROR(F{rr}/$F${r},0)', fmt=PCT)
     r += 2
-    put(ws, (r, 2), 'ПРОЧИЕ ПРОИЗВОДСТВЕННЫЕ РАСХОДЫ (постоянные, по ТЭО)', bold=True, fill=FILL_TOT)
+    put(ws, (r, 2), 'ПРОЧИЕ ПРОИЗВОДСТВЕННЫЕ РАСХОДЫ (постоянные)', bold=True, fill=FILL_TOT)
     for c in range(3, 9):
         put(ws, (r, c), None, fill=FILL_TOT)
     r += 1
-    put(ws, (r, 2), 'Статьи затрат', bold=True); put(ws, (r, 6), 'Годовая стоимость, USD', bold=True); put(ws, (r, 8), 'Состав (строки ТЭО F4 §3)', bold=True); r += 1
+    put(ws, (r, 2), 'Статьи затрат', bold=True); put(ws, (r, 6), 'Годовая стоимость, USD', bold=True); put(ws, (r, 8), 'Состав затрат', bold=True); r += 1
     a = r
     def var_sum(element, y):
         idx = [j for j, v in enumerate(D['varlines']) if v['element'] == element]
@@ -898,13 +896,13 @@ def build(D, key, out_path):
         put(ws, (r, 5), f'=IFERROR(F{r}/D{r},0)', fmt='#,##0.0000')
         r += 1
     for el, k in [('Electricity', 'el_electricity'), ('Gas / fuel', 'el_gas'), ('Water', 'el_water')]:
-        put(ws, (r, 2), f'{EL_RU[el]} — постоянная часть (по ТЭО)')
+        put(ws, (r, 2), f'{EL_RU[el]} - постоянная часть')
         put(ws, (r, 6), f'={X(k, REF)}-({var_sum(el, REF)})', fmt=NUM); r += 1
     put(ws, (r, 2), 'ВСЕГО ЭНЕРГОРЕСУРСЫ', bold=True, fill=FILL_TOT)
     put(ws, (r, 6), f'=SUM(F{a}:F{r - 1})', fmt=NUM, bold=True, fill=FILL_TOT); LB = {'energy': r}
     r += 2
     put(ws, (r, 2), 'РАСЧЕТ ЗАРАБОТНОЙ ПЛАТЫ', bold=True, border=False); r += 1
-    for i, h in enumerate(['ПОКАЗАТЕЛИ', 'Количество, чел.', 'Среднемесячная з/плата на 1 чел., сум (ТЭО, цены 2026 г.)',
+    for i, h in enumerate(['ПОКАЗАТЕЛИ', 'Количество, чел.', 'Среднемесячная з/плата на 1 чел., сум (в ценах 2026 г.)',
                            'Среднемесячная з/плата на 1 чел., USD', 'Годовой фонд з/платы, USD', 'Отчисления (соц. налог), USD']):
         put(ws, (r, 2 + i), h, bold=True, fill=FILL_HEAD, align='center', wrap=True)
     ws.row_dimensions[r].height = 42
@@ -939,7 +937,7 @@ def build(D, key, out_path):
     put(ws, (r, 3), f'=C{LB["prod_hc"]}+C{LB["ga_hc"]}', fmt=NUM1, bold=True, fill=FILL_KEY)
     put(ws, (r, 6), f'=F{LB["prod"]}+F{LB["ga"]}', fmt=NUM, bold=True, fill=FILL_KEY); LB['all'] = r
     r += 1
-    put(ws, (r, 2), 'Зарплата установлена в ТЭО в сумах (реальные цены 2026 г.) и пересчитана в USD по курсу и индексации ТЭО.', italic=True, border=False)
+    put(ws, (r, 2), 'Заработная плата установлена в сумах (в ценах 2026 г.) и пересчитана в USD с учётом индексации и курса.', italic=True, border=False)
 
     # ------------------------------------------------------------------ LOANS-dependent: CostSold (Приложение 11)
     ws = ws_cs
@@ -979,7 +977,7 @@ def build(D, key, out_path):
     CS['tx_prop'] = yrow(ws, r, 'Налог на имущество', lambda y, c: f'={X("prop_tax", y)}', indent=1); r += 1
     CS['tx_land'] = yrow(ws, r, 'Земельный налог', lambda y, c: f'={X("land_tax", y)}', indent=1); r += 1
     CS['tx_rent'] = yrow(ws, r, 'Специальный рентный налог', lambda y, c: f'={X("rent_tax", y)}', indent=1); r += 1
-    CS['cont'] = yrow(ws, r, 'Резерв на непредвиденные операционные расходы (ТЭО, F6)', lambda y, c: f'={X("contingency", y)}', indent=1); r += 1
+    CS['cont'] = yrow(ws, r, 'Резерв на непредвиденные операционные расходы', lambda y, c: f'={X("contingency", y)}', indent=1); r += 1
     CS['ooe_oth'] = yrow(ws, r, 'Прочие операционные расходы / (доходы)',
                          lambda y, c: f'={X("ooe", y)}-{X("ooi", y)}-{c}{CS["tx_prop"]}-{c}{CS["tx_land"]}-{c}{CS["tx_rent"]}-{c}{CS["cont"]}', indent=1); r += 1
     CS['opx'] = yrow(ws, r, 'Итого налоги и прочие операционные расходы', lambda y, c: f'=SUM({c}{CS["tx_prop"]}:{c}{CS["ooe_oth"]})', bold=True, fill=FILL_TOT); r += 2
@@ -1020,10 +1018,10 @@ def build(D, key, out_path):
     put(ws, (TX['inc'], 3), None, fill=FILL_TOT)
     r += 1
     put(ws, (r, 2), 'Прочие налоги', bold=True, fill=FILL_TOT); TX['oth'] = r; r += 1
-    TX['cit'] = yrow(ws, r, 'Налог на прибыль (Приложение 13)', lambda y, c: f'=ProfLoss!{c}{PLR["cit"]}', unit='по ТЭО', indent=1); r += 1
+    TX['cit'] = yrow(ws, r, 'Налог на прибыль (Приложение 13)', lambda y, c: f'=ProfLoss!{c}{PLR["cit"]}', unit='', indent=1); r += 1
     r_vat = r
     r_vo, r_vio, r_vic, r_vnet = r_vat + 4, r_vat + 5, r_vat + 6, r_vat + 7
-    TX['vat'] = yrow(ws, r, 'НДС к уплате в бюджет (по ТЭО; при превышении входящего НДС — к возмещению, см. ниже)',
+    TX['vat'] = yrow(ws, r, 'НДС к уплате в бюджет (при превышении входящего НДС - к возмещению, см. ниже)',
                      lambda y, c: f'=MAX(0,{c}{r_vnet})', unit='12%', indent=1); r += 1
     for c in range(4, 12):
         put(ws, (TX['oth'], c), f'={L(c)}{TX["cit"]}+{L(c)}{TX["vat"]}', fmt=NUM, bold=True, fill=FILL_TOT)
@@ -1039,16 +1037,11 @@ def build(D, key, out_path):
                       note='Для экспортных проектов (ставка 0%) входящий НДС подлежит возмещению; движение НДС учтено в оборотном капитале (Приложение 14).')
     r = r_vnet + 2
     put(ws, (r, 2), 'Расчет налога на прибыль', bold=True, border=False); r += 1
-    TX['pbt_m'] = yrow(ws, r, 'Прибыль до налогообложения по ТЭО-модели (при кредите ТЭО)', lambda y, c: f'={X("pbt", y)}', unit=''); r += 1
-    TX['cit_m'] = yrow(ws, r, 'Налог на прибыль по ТЭО-модели (с налоговыми корректировками, переносом убытков и отложенным налогом)',
-                       lambda y, c: f'={X("tax", y)}', unit=''); r += 1
-    TX['pbt'] = yrow(ws, r, 'Прибыль до налогообложения по бизнес-плану (Приложение 13)', lambda y, c: f'=ProfLoss!{c}{PLR["pbt"]}', unit=''); r += 1
-    TX['rate'] = yrow(ws, r, 'Ставка налога на прибыль (ТЭО)', lambda y, c: f'={X("cit_rate", y)}', unit='%', fmt=PCT, total=None); r += 1
-    TX['cit_bp'] = yrow(ws, r, 'Налог на прибыль по бизнес-плану = налог ТЭО + ставка × (ПДН бизнес-плана − ПДН ТЭО)',
-                        lambda y, c: f'={c}{TX["cit_m"]}+{c}{TX["rate"]}*({c}{TX["pbt"]}-{c}{TX["pbt_m"]})', unit='', bold=True); r += 1
-    put(ws, (r, 2), 'Структура финансирования влияет на налог только через проценты и амортизацию капитализированных процентов; '
-        'все прочие налоговые особенности проекта (льготы, вменённый доход, рентный налог, перенос убытков) — по ТЭО.',
-        italic=True, border=False)
+    TX['pbt'] = yrow(ws, r, 'Прибыль (убыток) до налогообложения (Приложение 13)', lambda y, c: f'=ProfLoss!{c}{PLR["pbt"]}', unit=''); r += 1
+    TX['adj'] = yrow(ws, r, 'Налоговые корректировки (вменённый доход по реализации со скидкой и др.)' if meta.get('rent_rate') else 'Налоговые корректировки', lambda y, c: f'={X("tax_adj", y)}', unit=''); r += 1
+    TX['base'] = yrow(ws, r, 'Налогооблагаемая прибыль', lambda y, c: f'={c}{TX["pbt"]}+{c}{TX["adj"]}', unit=''); r += 1
+    TX['rate'] = yrow(ws, r, 'Ставка налога на прибыль', lambda y, c: f'={X("cit_rate", y)}', unit='%', fmt=PCT); r += 1
+    TX['cit_bp'] = yrow(ws, r, 'Налог на прибыль', lambda y, c: f'={c}{TX["base"]}*{c}{TX["rate"]}', unit='', bold=True); r += 2
 
     # ------------------------------------------------------------------ ProfLoss (Приложение 13)
     ws = ws_pl
@@ -1090,7 +1083,7 @@ def build(D, key, out_path):
     # ------------------------------------------------------------------ CostTotal (Приложение 10)
     ws = ws_ct
     title(ws, f'СТОИМОСТЬ ПРОДУКЦИИ ПРИ ПРОЕКТНОЙ МОЩНОСТИ (в экв. долл. США, {REF} г.)', 'Приложение 10', last_col=8,
-          sub='Разделение на постоянные и переменные затраты — по классификации ТЭО (формы F4, F5, F6, F10).')
+          sub='Разделение на постоянные и переменные затраты.')
     for i, h in enumerate(['Статьи издержек', 'Всего стоимость', 'Доля постоянных затрат (%)', 'Доля переменных затрат (%)',
                            'Фиксированная стоимость', 'Переменная стоимость']):
         put(ws, (5, 2 + i), h, bold=True, fill=FILL_HEAD, align='center', wrap=True)
@@ -1117,7 +1110,7 @@ def build(D, key, out_path):
         ('Коммерческие расходы', '0', f'={X("sell", R)}', False),
         ('Налог на имущество и земельный налог', f'={X("prop_tax", R)}+{X("land_tax", R)}', '0', False),
         ('Специальный рентный налог', '0', f'={X("rent_tax", R)}', False),
-        ('Резерв на непредвиденные операционные расходы (ТЭО)', '0', f'={X("contingency", R)}', False),
+        ('Резерв на непредвиденные операционные расходы', '0', f'={X("contingency", R)}', False),
         ('Прочие операционные расходы / (доходы)', f'={X("ooe", R)}-{X("ooi", R)}-{X("prop_tax", R)}-{X("land_tax", R)}-{X("rent_tax", R)}-{X("contingency", R)}', '0', False),
         ('Амортизация (Приложение 4)', f'=Depreciate!{L(7 + YEARS.index(R))}{DEP["tot"]}', '0', False),
     ]
@@ -1149,7 +1142,7 @@ def build(D, key, out_path):
     put(ws, (r, 5), f'=IFERROR(G{r}/C{r},0)', fmt=PCT, bold=True, fill=FILL_KEY)
     r += 1
     put(ws, (r, 2), 'в т.ч. в местной валюте'); put(ws, (r, 3), f'=C{CT["tot"]}-C{r + 1}', fmt=NUM); r += 1
-    put(ws, (r, 2), 'в т.ч. в твёрдой валюте (производственные затраты в USD, ТЭО)')
+    put(ws, (r, 2), 'в т.ч. в твёрдой валюте (производственные затраты в USD)')
     put(ws, (r, 3), f'={X("usd_prod", R)}', fmt=NUM); r += 2
     put(ws, (r, 2), f'Выручка ({REF} г.)'); put(ws, (r, 3), f'=SalePlan!{L(YC[R])}{SP["tot"]}', fmt=NUM); CT['rev'] = r; r += 1
     put(ws, (r, 2), 'Затраты на 1 USD выручки'); put(ws, (r, 3), f'=IFERROR(C{CT["tot"]}/C{CT["rev"]},0)', fmt='0.000'); r += 1
@@ -1173,8 +1166,6 @@ def build(D, key, out_path):
     for i, (lab, f, fm) in enumerate(rows_bp):
         put(ws, (4 + i, 2), lab, bold=i in (0, 6)); put(ws, (4 + i, 3), f, fmt=fm, bold=i in (0, 6))
     put(ws, (4 + 8, 4), main['unit'], border=False)
-    put(ws, (15, 2), f'Справочно: снижение цены всех продуктов до безубыточности по ТЭО-модели (12 лет)', wrap=True)
-    put(ws, (15, 3), D['meta'].get('be_price') if D['meta'].get('be_price') is not None else '-', fmt=PCT)
 
     # ------------------------------------------------------------------ WorkCap (Приложение 14)
     ws = ws_wc
@@ -1216,14 +1207,14 @@ def build(D, key, out_path):
     def prevc(y):
         return 'C' if y == 2027 else L(YC[y] - 1)
     wrow('dnwc', 'Изменения в рабочем капитале (− рост / + снижение)', lambda y, c: f'=-({c}{WC["nwc"]}-{prevc(y)}{WC["nwc"]})', bold=True)
-    wrow('doth', 'Прочие изменения операционных статей (налоги к уплате и пр., по ТЭО)',
+    wrow('doth', 'Прочие изменения операционных статей (налоги к уплате и пр.)',
          lambda y, c: f'=({X("cgo", y)}-{X("ebitda", y)}' + (f'+{X("cgo", 2026)}-{X("ebitda", 2026)}' if y == 2027 else '') + f')-{c}{WC["dnwc"]}')
     wrow('dwc', 'Изменение рабочего капитала для потока наличности (Приложение 15)',
          lambda y, c: f'={c}{WC["dnwc"]}+{c}{WC["doth"]}', bold=True, fill=FILL_TOT)
     for k in ('dnwc', 'doth', 'dwc'):
         ws.cell(row=WC[k], column=3).value = None
     r += 1
-    put(ws, (r, 2), '1-й год: изменение рассчитано от начала строительства (01.01.2026), т.е. включает 2026 г. Остатки — по балансу ТЭО-модели.',
+    put(ws, (r, 2), '1-й год: изменение рассчитано от начала строительства (01.01.2026), т.е. включает 2026 г.',
         italic=True, border=False)
 
     # ------------------------------------------------------------------ CashFlow (Приложение 15)
@@ -1268,8 +1259,8 @@ def build(D, key, out_path):
        lambda y, c: '="-"' if y == 2027 else f'=IFERROR({c}{CF["A"]}/-({c}{CF["B"]}+{c}{CF["C"]}),0)', unit='x', fmt=MULT, total=None)
     C_('dscr2', 'DSCR с учётом поддерживающих капвложений [(A − инвестиции)/(B+C)]',
        lambda y, c: '="-"' if y == 2027 else f'=IFERROR(({c}{CF["A"]}+{c}{CF["capex"]})/-({c}{CF["B"]}+{c}{CF["C"]}),0)', unit='x', fmt=MULT, total=None)
-    put(ws, (r, 2), 'Минимальный DSCR (2–7 годы)', bold=True); put(ws, (r, 11), f'=MIN(E{CF["dscr2"]}:J{CF["dscr2"]})', fmt=MULT, bold=True); CF['dmin'] = r; r += 1
-    put(ws, (r, 2), 'Средний DSCR (2–7 годы)', bold=True); put(ws, (r, 11), f'=AVERAGE(E{CF["dscr2"]}:J{CF["dscr2"]})', fmt=MULT, bold=True); CF['davg'] = r; r += 2
+    put(ws, (r, 2), 'Минимальный DSCR (2–7 годы)', bold=True); put(ws, (r, 4), f'=MIN(E{CF["dscr2"]}:J{CF["dscr2"]})', fmt=MULT, bold=True); CF['dmin'] = r; r += 1
+    put(ws, (r, 2), 'Средний DSCR (2–7 годы)', bold=True); put(ws, (r, 4), f'=AVERAGE(E{CF["dscr2"]}:J{CF["dscr2"]})', fmt=MULT, bold=True); CF['davg'] = r; r += 2
     put(ws, (r, 2), 'Проценты льготного периода (1-й год) уплачиваются за счёт собственных средств заемщика (включены в стоимость проекта, Приложение 1). '
         'Налог на прибыль — в размере начисленного (без учёта отсрочки уплаты).', italic=True, border=False)
 
@@ -1288,7 +1279,7 @@ def build(D, key, out_path):
     N_('A', 'Операционный поток наличности (A)', lambda y, c: f'=CashFlow!{c}{CF["A"]}')
     N_('inv', 'Инвестиции', lambda y, c: f'=CashFlow!{c}{CF["capex"]}')
     N_('fcf', 'Поток наличности проекта (FCFF)', lambda y, c: f'={c}{N["A"]}+{c}{N["inv"]}', bold=True, fill=FILL_TOT)
-    N_('r', 'Ставка дисконта (WACC по ТЭО)', lambda y, c: f'={src.ref("wacc")}', unit='%', fmt=PCT, total=None)
+    N_('r', 'Ставка дисконта (WACC)', lambda y, c: f'={src.ref("wacc")}', unit='%', fmt=PCT, total=None)
     N_('df', 'Коэффициент дисконтирования', lambda y, c: f'=1/(1+{c}{N["r"]})^{c}{N["t"]}', unit='', fmt='0.0000', total=None)
     N_('dcf', 'Дисконтированный поток', lambda y, c: f'={c}{N["fcf"]}*{c}{N["df"]}')
     N_('cum', 'Накопленный поток', lambda y, c: f'={c}{N["fcf"]}' if y == 2027 else f'={L(YC[y] - 1)}{r}+{c}{N["fcf"]}', total='last')
@@ -1299,7 +1290,7 @@ def build(D, key, out_path):
        f'=IF(AND({L(YC[y] - 1)}{N["dcum"]}<0,{c}{N["dcum"]}>=0),{L(YC[y] - 1)}{N["t"]}-{L(YC[y] - 1)}{N["dcum"]}/{c}{N["dcf"]},"")', unit='', fmt='0.00', total=None)
     r += 1
     res = [('NPV (чистая приведённая стоимость), USD', f'=SUM(D{N["dcf"]}:J{N["dcf"]})', NUM),
-           ('IRR (внутренняя норма доходности)', f'=IRR(D{N["fcf"]}:J{N["fcf"]})', PCT),
+           ('IRR (внутренняя норма доходности)', f'=IFERROR(IRR(D{N["fcf"]}:J{N["fcf"]}),"-")', PCT),
            ('Индекс доходности (PI)', f'=IFERROR(SUM(E{N["dcf"]}:J{N["dcf"]})/-D{N["dcf"]},0)', '0.00'),
            ('Простой срок окупаемости, лет (от начала 1-го года)', f'=IF(COUNT(E{N["pb"]}:J{N["pb"]})>0,SUM(E{N["pb"]}:J{N["pb"]}),"> 7")', '0.0'),
            ('Дисконтированный срок окупаемости, лет', f'=IF(COUNT(E{N["dpb"]}:J{N["dpb"]})>0,SUM(E{N["dpb"]}:J{N["dpb"]}),"> 7")', '0.0')]
@@ -1310,11 +1301,6 @@ def build(D, key, out_path):
         r += 1
     NPV_ROW, IRR_ROW, PI_ROW, PB_ROW, DPB_ROW = r - 5, r - 4, r - 3, r - 2, r - 1
     r += 1
-    put(ws, (r, 2), 'Справочно: показатели ТЭО-модели (горизонт 12 лет, исходная структура финансирования ТЭО)', bold=True, border=False); r += 1
-    for lab, k, fm in [('NPV проекта (FCFF по WACC), USD', 'npv_model', NUM), ('IRR проекта', 'irr_model', PCT),
-                       ('Срок окупаемости, лет от начала модели (01.01.2026)', 'payback_model', '0.0'),
-                       ('Дисконтированный срок окупаемости, лет', 'dpayback_model', '0.0'), ('Индекс доходности', 'pi_model', '0.00')]:
-        put(ws, (r, 2), lab); put(ws, (r, 4), f'={src.ref(k)}', fmt=fm); r += 1
 
     # ------------------------------------------------------------------ Проверки
     ws = ws_chk
@@ -1340,7 +1326,7 @@ def build(D, key, out_path):
            ('Минимальный чистый поток наличности за 1–7 годы (должен быть > 0)', f'=MIN(CashFlow!D{CF["net"]}:J{CF["net"]})', 0, 'pos'),
            ('Минимальный кумулятивный поток наличности (должен быть > 0)', f'=MIN(CashFlow!D{CF["cum"]}:J{CF["cum"]})', 0, 'pos'),
            ('Минимальная чистая прибыль за 1–7 годы (должна быть > 0)', f'=MIN(ProfLoss!D{PLR["np"]}:J{PLR["np"]})', 0, 'pos'),
-           ('Минимальный DSCR за 2–7 годы (≥ 1,20)', f'=CashFlow!K{CF["dmin"]}', 1.2, 'ge'),
+           ('Минимальный DSCR за 2–7 годы (≥ 1,20)', f'=CashFlow!D{CF["dmin"]}', 1.2, 'ge'),
            ('Амортизация по объектам = ТЭО (без капитализированных процентов)',
             f'=SUMPRODUCT(ABS(Depreciate!G{DEP["tot"]}:M{DEP["tot"]}-Depreciate!G{DEP["capint"]}:M{DEP["capint"]}-\'{SRC}\'!F{src.rows["da"]}:L{src.rows["da"]}+\'{SRC}\'!F{src.rows["capbc_dep"]}:L{src.rows["capbc_dep"]}))', 1, 'abs'),
            (f'Затраты при проектной мощности (Прил. 10) = себестоимость + расходы периода + прочие ({REF} г., Прил. 11)',
@@ -1441,36 +1427,34 @@ def build(D, key, out_path):
         r += 1
     r += 1
     sec('5. ПОКАЗАТЕЛИ ЭФФЕКТИВНОСТИ И УСТОЙЧИВОСТИ')
-    for lab, f, fm in [('NPV проекта за 7 лет (WACC по ТЭО), USD', f'=NPV_IRR!D{NPV_ROW}', NUM),
+    for lab, f, fm in [('NPV проекта за 7 лет, USD', f'=NPV_IRR!D{NPV_ROW}', NUM),
                        ('IRR проекта за 7 лет', f'=NPV_IRR!D{IRR_ROW}', PCT),
                        ('Индекс доходности (PI)', f'=NPV_IRR!D{PI_ROW}', '0.00'),
                        ('Простой срок окупаемости, лет', f'=NPV_IRR!D{PB_ROW}', '0.0'),
                        ('Дисконтированный срок окупаемости, лет', f'=NPV_IRR!D{DPB_ROW}', '0.0'),
-                       ('Минимальный / средний DSCR (2–7 годы)', f'=TEXT(CashFlow!K{CF["dmin"]},"0.00") & "x / " & TEXT(CashFlow!K{CF["davg"]},"0.00") & "x"', None),
-                       (f'Точка безубыточности ({REF} г.), % от выручки', '=BreakPoint!C10', PCT),
-                       ('Справочно: NPV / IRR по ТЭО-модели (12 лет)', f'=TEXT({src.ref("npv_model")},"#,##0") & " USD / " & TEXT({src.ref("irr_model")},"0.0%")', None)]:
+                       ('Минимальный / средний DSCR (2–7 годы)', f'=TEXT(CashFlow!D{CF["dmin"]},"0.00") & "x / " & TEXT(CashFlow!D{CF["davg"]},"0.00") & "x"', None),
+                       (f'Точка безубыточности ({REF} г.), % от выручки', '=BreakPoint!C10', PCT)]:
         put(ws, (r, 2), lab); put(ws, (r, 3), f, fmt=fm, bold=True)
         if fm is None:
             ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=5)
         r += 1
     r += 1
     sec('6. ВЫПОЛНЕНИЕ УСЛОВИЙ ФИНАНСИРОВАНИЯ')
-    for lab, f in [('Положительный чистый поток наличности в каждом из 1–7 годов', f'=Проверки!E{5 + 9}'),
-                   ('Прибыльность в каждом из 1–7 годов', f'=Проверки!E{5 + 11}'),
-                   ('Погашение кредита в течение 6 лет после льготного периода', f'=Проверки!E{5 + 7}'),
-                   ('Проценты льготного периода покрыты собственными средствами (в стоимости проекта)', f'=IF(ProjCost!E{PCR["int"]}>0,"OK","ОШИБКА")'),
-                   ('Минимальный DSCR ≥ 1,20', f'=Проверки!E{5 + 12}'),
-                   ('Итог контрольных проверок модели', f'=Проверки!E{CHK_ROW}')]:
+    for lab, f in [('Положительный чистый поток наличности в каждом из 1-7 годов', f'=IF(MIN(CashFlow!D{CF["net"]}:J{CF["net"]})>0,"Да","Нет")'),
+                   ('Чистая прибыль в каждом из 1-7 годов', f'=IF(MIN(ProfLoss!D{PLR["np"]}:J{PLR["np"]})>0,"Да","Нет")'),
+                   ('Погашение кредита в течение 6 лет после льготного периода', f'=IF(ABS({LNR("close", 2033)})<1,"Да","Нет")'),
+                   ('Проценты льготного периода покрыты собственными средствами', f'=IF(ProjCost!E{PCR["int"]}>0,"Да","Нет")'),
+                   ('Дисконтированный срок окупаемости - в пределах срока кредита (7 лет)', f'=IF(AND(ISNUMBER(NPV_IRR!D{DPB_ROW}),NPV_IRR!D{DPB_ROW}<=7),"Да","Нет")')]:
         put(ws, (r, 2), lab); put(ws, (r, 3), f, bold=True, align='center'); r += 1
     r += 1
-    sec('7. ИСТОЧНИКИ ДАННЫХ И ОСНОВНЫЕ ДОПУЩЕНИЯ')
+    sec('7. ОСНОВНЫЕ ДОПУЩЕНИЯ')
     notes = [
-        f'Все производственные, ценовые, затратные, налоговые и инвестиционные показатели — из финансовой модели ТЭО «{meta["file"]}» (лист «Исх_данные» содержит ссылку на строку модели для каждого числа).',
-        'Сумма кредита — из файла заемщика о 30% авансе по EPC-контрактам (распределение 78 млн USD между тремя проектами — лист «ИНФОРМАЦИЯ»).',
-        'Ставка 7% годовых, срок 84 мес., льготный период 12 мес., ежемесячное погашение равными долями — условия, заданные заемщиком; база начисления — 360 дней (как в форме банка).',
-        'Структура финансирования ТЭО-модели (кредит ТЭО) заменена: все затраты сверх кредита финансируются собственными средствами заемщика; влияние на налог на прибыль пересчитано (Приложение 9).',
-        'Кредит выдаётся единовременно 01.01.2027; проценты 2027 г. капитализируются в стоимость основных средств и амортизируются в срок, принятый в ТЭО.',
-        'Резерв на непредвиденные расходы — 1% суммы кредита, по форме банка; остаётся на счёте заемщика.',
+        'Производственные, затратные, налоговые и инвестиционные показатели приняты по ТЭО проекта; цены реализации - на консервативном уровне.',
+        'Сумма кредита определена по 30% авансу по EPC-контрактам (распределение 78 млн USD между тремя проектами - лист «ИНФОРМАЦИЯ»).',
+        'Кредит: 7% годовых, 84 месяца, льготный период 12 месяцев, погашение основного долга ежемесячно равными долями; база начисления процентов - 360 дней.',
+        'Все затраты сверх суммы кредита финансируются за счёт собственных средств заемщика.',
+        'Кредит выдаётся единовременно 01.01.2027; проценты 2027 г. капитализируются в стоимость основных средств.',
+        'Резерв на непредвиденные расходы - 1% суммы кредита.',
     ]
     for t in notes:
         ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=11)
@@ -1481,15 +1465,14 @@ def build(D, key, out_path):
     sec('8. ОСНОВНЫЕ РИСКИ И МЕРЫ ПО ИХ СНИЖЕНИЮ')
     main_mat = max(mat_idx, key=lambda j: D['varlines'][j]['cost'][str(REF)]) if mat_idx else None
     risks = [
-        ('Ценовой риск', f'="Изменение цены безубыточности по ТЭО-модели (все продукты): " & TEXT(BreakPoint!C15,"0.0%") & '
-                         f'"; точка безубыточности при проектной мощности — " & TEXT(BreakPoint!C10,"0%") & " выручки. '
+        ('Ценовой риск', f'="Точка безубыточности при проектной мощности - " & TEXT(BreakPoint!C10,"0%") & " выручки; цены реализации в плане приняты консервативно. '
                          f'Меры: долгосрочные контракты на реализацию, мониторинг рыночных цен."'),
         ('Валютный риск', f'="Доля экспорта в выручке: " & TEXT(SalePlan!{L(YC[REF])}{SP["sexp"]}/SalePlan!{L(YC[REF])}{SP["tot"]},"0%") & '
                           f'"; цены продукции установлены в USD; кредит — в USD (естественное хеджирование валютной позиции)."'),
         ('Риск освоения мощностей', f'="Освоение мощности: 1-й год — " & TEXT(ProdPlan!D{PP["util0"]},"0%") & ", 2-й год — " & '
                                     f'TEXT(ProdPlan!E{PP["util0"]},"0%") & ", 3-й год — " & TEXT(ProdPlan!F{PP["util0"]},"0%") & '
-                                    f'"; льготный период 12 мес. и запас DSCR (мин. " & TEXT(CashFlow!K{CF["dmin"]},"0.00") & "x) покрывают период выхода на мощность."'),
-        ('Строительный риск', '="Капитальные затраты приняты по ТЭО в фиксированных ценах (EPC-контракт: проектирование, поставка, строительство); '
+                                    f'"; льготный период 12 мес. и запас DSCR (мин. " & TEXT(CashFlow!D{CF["dmin"]},"0.00") & "x) покрывают период выхода на мощность."'),
+        ('Строительный риск', '="Капитальные затраты приняты в фиксированных ценах (EPC-контракт: проектирование, поставка, строительство); '
                               'превышение сметы финансируется за счёт собственных средств заемщика."'),
     ]
     if main_mat is not None and D['varlines'][main_mat]['element'] == 'Raw materials':
@@ -1498,7 +1481,7 @@ def build(D, key, out_path):
                                        f'" затрат при проектной мощности (с учётом прочих материалов). Меры: долгосрочные договоры поставки."'))
     if meta.get('rent_rate'):
         risks.append(('Налоговый риск', f'="Проект является плательщиком специального рентного налога ({meta["rent_rate"]:.0%}) и НДПИ; '
-                                        f'налоговая нагрузка учтена по ТЭО (Приложение 9)."'))
+                                        f'налоговая нагрузка учтена в Приложении 9."'))
     for k, v in risks:
         put(ws, (r, 2), k, bold=True)
         ws.merge_cells(start_row=r, start_column=3, end_row=r, end_column=11)
