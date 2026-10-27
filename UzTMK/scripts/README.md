@@ -16,3 +16,7 @@ number with a link).
 Sarikul file: carries the reviewer's manual edits (ИНФОРМАЦИЯ, Share of costs, RawMat, Labour, CashFlow,
 BreakPoint). `sarikul_costsold.py <edited file> <out>` was applied on top of it to show mining and processing
 costs as two lines in CostSold (the FS model has no materials / energy split for Sarikul).
+
+Year-1 interest: `year1_interest.py <file> <out>` was applied to all three files. It shows the grace-period interest as a
+year-1 expense in CostSold / ProfLoss / CashFlow (it stays in the project cost, paid from own funds), removes the
+capitalised-interest row from Depreciate and keeps income tax non-negative (a year-1 loss is carried forward).
