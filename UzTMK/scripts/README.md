@@ -9,4 +9,6 @@ python3 -c "from make import make; make('<key>', <price factor>, '../UzTMK_BankB
 
 Price factors used: sarikul 0.849 (from 2027), tungsten 0.978 (from 2027), moly 0.773 (from 2028).
 `adjust.py` applies the factor to sale prices and updates every revenue-linked item; `make.py` builds,
-recalculates and writes the source numbers straight into the bank sheets.
+recalculates and writes the source numbers straight into the bank sheets: every input appears once as a value,
+everything else is a plain formula link between the bank sheets (the build stops if a formula would mix a source
+number with a link).

@@ -51,6 +51,18 @@ def finalise(path):
     wf = openpyxl.load_workbook(path)
     wv = openpyxl.load_workbook(path, data_only=True)
     src = wf[SRC]
+    mixed = []
+    for ws in wf.worksheets:
+        if ws.title in (SRC, 'Проверки'):
+            continue
+        for row in ws.iter_rows():
+            for c in row:
+                f = c.value
+                if isinstance(f, str) and f.startswith('=') and SRC in f:
+                    rest = REF.sub('', f)
+                    if re.search(r"(?<![A-Za-z])\$?[A-Z]{1,3}\$?\d+(?![\d(])", rest) or '!' in rest:
+                        mixed.append(f'{ws.title}!{c.coordinate}')
+    assert not mixed, ('formulas mixing source data and links', mixed[:20])
     for ws in wf.worksheets:
         if ws.title in (SRC, 'Проверки'):
             continue

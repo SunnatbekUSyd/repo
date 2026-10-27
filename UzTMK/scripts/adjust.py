@@ -81,6 +81,8 @@ def adjust(D, k, start=2027):
         rate = s['cit_rate'][y]
         implied = (-s['tax'][y] / rate - s['pbt'][y]) if rate else 0.0
         adj[y] = implied + deemed[y] * (r[y] - 1)
+        if abs(adj[y]) < 1:
+            adj[y] = 0.0
     s['tax_adj'] = adj
     D['src']['tax_adj'] = 'расчёт'
     D['meta']['price_factor'] = k
